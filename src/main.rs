@@ -14,21 +14,42 @@
 #![cfg_attr(test, reexport_test_harness_main = "test_main")]
 #![cfg_attr(test, test_runner(agb::test_runner::test_runner))]
 
-use agb::{display, syscall};
+use agb::{
+    display::{
+        tiled::{RegularBackgroundSize, TileFormat, TileSet, TileSetting, TiledMap},
+        Priority,
+    },
+    include_gfx, syscall,
+};
+
+agb::include_gfx!("gfx/beargba.toml");
 
 // The main function must take 1 arguments and never return. The agb::entry decorator
 // ensures that everything is in order. `agb` will call this after setting up the stack
 // and interrupt handlers correctly. It will also handle creating the `Gba` struct for you.
 #[agb::entry]
 fn main(mut gba: agb::Gba) -> ! {
-    let mut bitmap = gba.display.video.bitmap3();
+    let gfx = gba.display.object.get();
+    let vblank = agb::interrupt::VBlank::get();
+    let (tiled, mut vram) = gba.display.video.tiled0();
+    let tileset = TileSet::new(beargba::title.tiles, TileFormat::FourBpp);
 
-    for x in 0..display::WIDTH {
-        let y = syscall::sqrt(x << 6);
-        let y = (display::HEIGHT - y).clamp(0, display::HEIGHT - 1);
-        bitmap.draw_point(x, y, 0x001F);
+    vram.set_background_palettes(beargba::PALETTES);
+
+    let mut bg = tiled.background(Priority::P0, RegularBackgroundSize::Background32x32);
+
+    for y in 0..20u16 {
+        for x in 0..30u16 {
+            bg.set_tile(
+                &mut vram,
+                (x, y).into(),
+                &tileset,
+                TileSetting::new(x + y * 30u16, false, false, 0),
+            );
+        }
     }
-
+    bg.commit(&mut vram);
+    bg.show();
     loop {
         syscall::halt();
     }
